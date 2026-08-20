@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/auth/application/auth_providers.dart';
 import '../features/auth/data/firebase_auth_repository.dart';
+import '../features/discovery/application/discovery_providers.dart';
+import '../features/discovery/data/firebase_discovery_repository.dart';
 import '../features/onboarding/application/onboarding_providers.dart';
 import '../features/onboarding/data/firestore_onboarding_repository.dart';
 import '../features/settings/application/account_deletion_service.dart';
@@ -52,6 +54,13 @@ Future<List<Override>> firebaseBootstrap() async {
       // account, not just deactivate it.
       accountDeletionRepositoryProvider.overrideWithValue(
         FirebaseAccountDeletionRepository(),
+      ),
+      // Real discovery: ranks actual onboarded users via the discoverProfiles
+      // Cloud Function (sanitized cards). Replaces the hardcoded mock list, so
+      // no fabricated profiles ship (Apple 2.1). An empty result shows the
+      // honest empty state rather than fake people.
+      discoveryRepositoryProvider.overrideWithValue(
+        FirebaseDiscoveryRepository(),
       ),
     ];
   } catch (e) {
