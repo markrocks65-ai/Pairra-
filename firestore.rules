@@ -1,0 +1,154 @@
+rules_version = '2';
+
+// PAIRRA Firestore security rules — least privilege, owner-scoped, and
+// safe-by-default for the collections that aren't wired to Firestore yet.
+//
+// Principles:
+//  • A user can read/write only their own private data.
+//  • Server-only fields (verification results, entitlements, phone-verified,
+//    identity status) can NEVER be written by a client — only Cloud Functions
+//    using the Admin SDK (which bypasses these rules) may set them. This is what
+//    prevents a client from self-verifying, self-granting premium, or
+//    self-attesting a verified phone.
+//  • Other users' data is reached ONLY through server-published projections
+//    (publicProfiles) that contain non-sensitive fields — never the private
+//    draft, never sexual roles/preferences, never exact/approx coordinates.
+//  • Conversations and matches are strictly participant-scoped (no message IDOR).
+//  • A user's exact location is never stored in a client-writable field.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Fields on the user doc that ONLY the server (Admin SDK) may set/change.
+    function serverOnlyUserKeys() {
+      return ['verification', 'plan', 'planUpdatedAt', 'identityStatus',
+              'phoneVerified', 'phoneNumber'];
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow delete: if isOwner(uid);
+
+      // The user may create their own account doc (email, consent) but may NEVER
+      // introduce a server-only field.
+      allow create: if isOwner(uid)
+        && !request.resource.data.keys().hasAny(serverOnlyUserKeys());
+
+      // On update: no server-only field may change, and identity fields (email,
+      // createdAt) are immutable once set.
+      allow update: if isOwner(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(serverOnlyUserKeys())
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      // Per-user subcollections (the private onboarding/profile draft at
+      // private/profile, and any future per-user data) — owner only.
+      //
+      // IMPORTANT: this match starts with a subcollection segment ({sub}) on
+      // purpose. Under rules_version 2 a bare `match /{document=**}` matches
+      // ZERO or more segments, so it would ALSO match the parent users/{uid}
+      // document and grant the owner unrestricted write — bypassing the
+      // server-only-field and email/createdAt-immutability checks above. By
+      // requiring a {sub} segment, this only ever governs documents strictly
+      // BELOW users/{uid}. (Verified by firestore_rules_test.)
+      match /{sub}/{document=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // Public, non-sensitive profile projection for discovery/matches. Written
+    // ONLY by the server (a Cloud Function projects the owner's public fields
+    // here — never sexual roles, private preferences, or coordinates; distance
+    // is precomputed coarse). Any signed-in user may read; no client may write.
+    match /publicProfiles/{uid} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Mutual matches — created server-side when two users like each other. Only
+    // the two participants may read; clients never write.
+    match /matches/{matchId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.participants;
+      allow write: if false;
+    }
+
+    // Conversations + messages — strictly participant-scoped. This is the core
+    // defense against message-access IDOR: you can only touch a conversation you
+    // are a participant of, and you can only author messages as yourself.
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.participants;
+      // Conversations are opened server-side on match; clients don't create them.
+      allow create, update, delete: if false;
+
+      match /messages/{messageId} {
+        function conversationParticipants() {
+          return get(/databases/$(database)/documents/conversations/$(conversationId))
+                   .data.participants;
+        }
+
+        allow read: if isSignedIn()
+          && request.auth.uid in conversationParticipants();
+
+        // You may only author a message as yourself, in a conversation you're a
+        // participant of, and the text is size-bounded.
+        allow create: if isSignedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && request.auth.uid in conversationParticipants()
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 5000;
+
+        // Messages are immutable; redaction/deletion is a server action.
+        allow update, delete: if false;
+      }
+    }
+
+    // Moderation queue. A signed-in user may FILE a report and nothing more:
+    // they can never read, update or delete a case (so they can't see who
+    // reported them or tamper with triage). The create is validated so a client
+    // can't self-resolve a report about themselves or write abusive/huge blobs:
+    //  • the reporter must be themselves (no framing a third party),
+    //  • the case must open as 'pending' with no resolution note,
+    //  • text fields are size-bounded.
+    match /moderationCases/{caseId} {
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && (!('status' in request.resource.data)
+            || request.resource.data.status == 'pending')
+        && !('resolutionNote' in request.resource.data)
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 200
+        && (!('contentSnapshot' in request.resource.data)
+            || (request.resource.data.contentSnapshot is string
+                && request.resource.data.contentSnapshot.size() <= 5000))
+        && (!('note' in request.resource.data)
+            || (request.resource.data.note is string
+                && request.resource.data.note.size() <= 2000));
+      allow read, update, delete: if false;
+    }
+
+    // Account-deletion requests. A user may file their OWN deletion request
+    // (kicking off the server-side purge/anonymize cascade); they can't read or
+    // alter the queue.
+    match /deletionRequests/{requestId} {
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    // Server-only collections (verification submissions, moderation actions,
+    // internal projections) are never accessible to clients; Cloud Functions
+    // (Admin SDK) handle them.
+    match /_server/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// PAIRRA Cloud Storage security rules — safe-by-default for user photos.
+//
+// Two paths, mirroring the Firestore publicProfiles pattern:
+//  • profilePhotos/{uid}/**  — RAW uploads. Owner-only read AND write. Other
+//    users can never read these, because a freshly uploaded photo has not been
+//    through image moderation yet.
+//  • publicPhotos/{uid}/**   — MODERATED, server-published derivatives shown in
+//    discovery. Any signed-in user may read; only the server (Admin SDK) writes.
+//
+// Everything else is denied. Uploads are constrained to images under a size cap.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /profilePhotos/{uid}/{photoId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /publicPhotos/{uid}/{photoId} {
+      allow read: if request.auth != null;
+      allow write: if false; // server-published only, after moderation
+    }
+
+    // Deny everything else by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
