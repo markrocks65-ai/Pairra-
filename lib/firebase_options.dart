@@ -56,13 +56,12 @@ class DefaultFirebaseOptions {
     projectId: 'pairra-app-e104f',
     storageBucket: 'pairra-app-e104f.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCqsDRhi_wjOQFKBRNDLwZ5w3Lm62HZsrE',
-    appId: '1:998272819517:ios:4054d1b44fbb90554e6554',
+    appId: '1:998272819517:ios:16f517e3a8e801b74e6554',
     messagingSenderId: '998272819517',
     projectId: 'pairra-app-e104f',
     storageBucket: 'pairra-app-e104f.firebasestorage.app',
-    iosBundleId: 'com.pairra.pairra',
+    iosBundleId: 'app.pairra.ios',
   );
 }

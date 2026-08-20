@@ -78,7 +78,7 @@ workflows:
       <<: *flutter_setup
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.pairra.pairra
+        bundle_identifier: app.pairra.ios
       vars:
         APP_STORE_APPLE_ID: 0000000000     # <-- your app's numeric Apple ID (set once app exists)
     scripts:
