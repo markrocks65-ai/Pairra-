@@ -55,6 +55,7 @@ class FirebaseMatchesRepository implements MatchesRepository {
     final createdAt = data['createdAt'];
     return Match(
       id: doc.id,
+      otherId: otherUid,
       profile: onboardingProfileFromPublicCard(
         Map<String, dynamic>.from(card),
         uidForPhotos: otherUid,

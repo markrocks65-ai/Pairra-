@@ -12,9 +12,15 @@ class Match {
     required this.profile,
     required this.compatibilityPercent,
     required this.matchedAt,
+    this.otherId = '',
   });
 
   final String id;
+
+  /// The matched user's uid (used for messaging, block and report). Falls back
+  /// to [id] when not set (legacy/mock paths).
+  final String otherId;
+
   final OnboardingProfile profile;
   final int compatibilityPercent;
   final DateTime matchedAt;

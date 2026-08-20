@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pairra/features/discovery/application/matches_controller.dart';
 import 'package:pairra/features/discovery/data/noop_matches_repository.dart';
+import 'package:pairra/features/messaging/data/in_memory_messaging_repository.dart';
 import 'package:pairra/features/discovery/domain/match.dart';
 import 'package:pairra/features/messaging/application/icebreakers.dart';
 import 'package:pairra/features/messaging/application/messaging_controller.dart';
-import 'package:pairra/features/messaging/domain/message.dart';
 import 'package:pairra/features/onboarding/domain/onboarding_profile.dart';
 
 Match _match(String id, {String name = 'Alex', Set<String> interests = const {}}) =>
@@ -36,8 +36,12 @@ void main() {
   });
 
   group('MessagingController', () {
+    MessagingController make() =>
+        MessagingController(InMemoryMessagingRepository());
+    Future<void> pump() => Future<void>.delayed(Duration.zero);
+
     test('sync creates a conversation seeded with one system safety note', () {
-      final c = MessagingController();
+      final c = make();
       c.syncMatches([_match('m1', name: 'Sam')]);
 
       final convo = c.state.conversation('m1');
@@ -49,37 +53,42 @@ void main() {
       expect(c.state.isFresh('m1'), isTrue);
     });
 
-    test('sync is idempotent and preserves typed messages', () {
-      final c = MessagingController();
+    test('sendText streams my message onto the thread (trimmed)', () async {
+      final c = make();
       c.syncMatches([_match('m1')]);
-      c.sendText('m1', 'hey');
-      c.syncMatches([_match('m1')]); // e.g. matches list re-emitted
-      expect(c.state.messagesFor('m1').length, 2);
-    });
-
-    test('sendText appends my message and updates the conversation', () {
-      final c = MessagingController();
-      c.syncMatches([_match('m1')]);
-      c.sendText('m1', '  hi there  ');
+      c.openConversation('m1');
+      await c.sendText('m1', '  hi there  ');
+      await pump();
 
       final msgs = c.state.messagesFor('m1');
       expect(msgs.length, 2);
       expect(msgs.last.isMine, isTrue);
       expect(msgs.last.text, 'hi there', reason: 'trimmed');
-      expect(msgs.last.status, MessageStatus.sent);
       expect(c.state.isFresh('m1'), isFalse);
       expect(c.state.conversation('m1')!.lastMessage!.text, 'hi there');
     });
 
-    test('empty text is ignored', () {
-      final c = MessagingController();
+    test('sync is idempotent for an existing conversation', () async {
+      final c = make();
       c.syncMatches([_match('m1')]);
-      c.sendText('m1', '   ');
+      c.openConversation('m1');
+      await c.sendText('m1', 'hey');
+      await pump();
+      c.syncMatches([_match('m1')]); // matches list re-emitted
+      expect(c.state.messagesFor('m1').length, 2);
+    });
+
+    test('empty text is ignored', () async {
+      final c = make();
+      c.syncMatches([_match('m1')]);
+      c.openConversation('m1');
+      await c.sendText('m1', '   ');
+      await pump();
       expect(c.state.messagesFor('m1').length, 1);
     });
 
     test('removeConversation clears it', () {
-      final c = MessagingController();
+      final c = make();
       c.syncMatches([_match('m1')]);
       c.removeConversation('m1');
       expect(c.state.conversation('m1'), isNull);

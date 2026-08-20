@@ -40,7 +40,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(messagingControllerProvider.notifier).markRead(_id);
+      ref.read(messagingControllerProvider.notifier)
+        ..openConversation(_id)
+        ..markRead(_id);
       _jumpToBottom();
     });
   }

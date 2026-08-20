@@ -193,6 +193,7 @@ class DiscoveryController extends StateNotifier<DiscoveryState> {
     if (current.candidate.likesYou) {
       match = Match(
         id: current.candidate.id,
+        otherId: current.candidate.id,
         profile: current.candidate.profile,
         compatibilityPercent: current.score.percent,
         matchedAt: DateTime.now(),

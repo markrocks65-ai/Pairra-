@@ -7,7 +7,7 @@ import 'messaging_controller.dart';
 /// in sync as new matches arrive (without dropping typed messages).
 final messagingControllerProvider =
     StateNotifierProvider<MessagingController, MessagingState>((ref) {
-  final controller = MessagingController();
+  final controller = MessagingController(ref.watch(messagingRepositoryProvider));
   controller.syncMatches(ref.read(matchesControllerProvider));
   ref.listen(
     matchesControllerProvider,

@@ -12,6 +12,8 @@ import '../features/discovery/application/matches_controller.dart';
 import '../features/discovery/data/firebase_discovery_repository.dart';
 import '../features/discovery/data/firebase_likes_repository.dart';
 import '../features/discovery/data/firebase_matches_repository.dart';
+import '../features/messaging/application/messaging_controller.dart';
+import '../features/messaging/data/firebase_messaging_repository.dart';
 import '../features/onboarding/application/onboarding_providers.dart';
 import '../features/onboarding/data/firestore_onboarding_repository.dart';
 import '../features/settings/application/account_deletion_service.dart';
@@ -79,6 +81,15 @@ Future<List<Override>> firebaseBootstrap() async {
       // other participant's public card); unmatch goes through the callable.
       matchesRepositoryProvider.overrideWithValue(
         FirebaseMatchesRepository(
+          FirebaseFirestore.instance,
+          FirebaseAuth.instance,
+          FirebaseFunctions.instance,
+        ),
+      ),
+      // Real messaging: live message threads, sends authored as the user, and
+      // server-side markRead. Message data lives at conversations/{cid}/messages.
+      messagingRepositoryProvider.overrideWithValue(
+        FirebaseMessagingRepository(
           FirebaseFirestore.instance,
           FirebaseAuth.instance,
           FirebaseFunctions.instance,

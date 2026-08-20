@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../discovery/domain/match.dart';
+import '../data/in_memory_messaging_repository.dart';
 import '../domain/conversation.dart';
 import '../domain/message.dart';
+import '../domain/messaging_repository.dart';
 
-/// In-memory messaging store (session-scoped), same pattern as the other mock
-/// stores. Swap for a Firestore-backed repository later — the UI reads this
-/// provider unchanged. Conversations are derived from matches; each new one is
-/// seeded with a single, non-repeating safety reminder.
+/// Messaging store. Conversations are derived from (now real) matches and each
+/// is seeded with a single, non-repeating safety reminder shown locally on top
+/// of the live message thread. Message send/stream/read go through a
+/// [MessagingRepository] (Firestore in production, in-memory in dev/tests).
 @immutable
 class MessagingState {
   const MessagingState({this.conversations = const {}, this.messages = const {}});
@@ -40,11 +44,15 @@ class MessagingState {
 }
 
 class MessagingController extends StateNotifier<MessagingState> {
-  MessagingController() : super(const MessagingState());
+  MessagingController(this._repository) : super(const MessagingState());
 
-  /// Creates a conversation for any match that doesn't have one yet, seeded
-  /// with a subtle one-time safety reminder. Never removes existing ones, so
-  /// typed messages survive when new matches arrive.
+  final MessagingRepository _repository;
+  final Map<String, Message> _systemNotes = {};
+  final Map<String, StreamSubscription<List<Message>>> _subs = {};
+
+  /// Creates a conversation for any match that doesn't have one yet, seeded with
+  /// a subtle one-time safety reminder. Never removes existing ones, so open
+  /// threads survive when new matches arrive.
   void syncMatches(List<Match> matches) {
     final conversations = {...state.conversations};
     final messages = {...state.messages};
@@ -62,10 +70,11 @@ class MessagingController extends StateNotifier<MessagingState> {
             'pick a public place and let a friend know your plans.',
         sentAt: match.matchedAt,
       );
+      _systemNotes[match.id] = reminder;
       messages[match.id] = [reminder];
       conversations[match.id] = Conversation(
         id: match.id,
-        otherId: match.id,
+        otherId: match.otherId.isNotEmpty ? match.otherId : match.id,
         otherProfile: match.profile,
         lastActivity: match.matchedAt,
         lastMessage: reminder,
@@ -78,39 +87,46 @@ class MessagingController extends StateNotifier<MessagingState> {
     }
   }
 
-  void sendText(String conversationId, String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
-    final conversation = state.conversations[conversationId];
-    if (conversation == null) return;
+  /// Begin streaming a conversation's live messages (call when it's opened).
+  void openConversation(String conversationId) {
+    if (_subs.containsKey(conversationId)) return;
+    _subs[conversationId] = _repository.watchMessages(conversationId).listen(
+          (msgs) => _applyThread(conversationId, msgs),
+          onError: (_) {},
+        );
+  }
 
-    final message = Message(
-      id: '${conversationId}_${DateTime.now().microsecondsSinceEpoch}',
-      conversationId: conversationId,
-      senderId: Message.selfId,
-      type: MessageType.text,
-      text: trimmed,
-      sentAt: DateTime.now(),
-      // A real backend advances this to delivered/read (future read receipts).
-      status: MessageStatus.sent,
-    );
-
+  void _applyThread(String conversationId, List<Message> streamed) {
+    if (!mounted) return;
+    final note = _systemNotes[conversationId];
+    final thread = <Message>[?note, ...streamed];
+    final convo = state.conversations[conversationId];
+    final last = streamed.isNotEmpty ? streamed.last : note;
     state = state.copyWith(
-      messages: {
-        ...state.messages,
-        conversationId: [...state.messagesFor(conversationId), message],
-      },
-      conversations: {
-        ...state.conversations,
-        conversationId: conversation.copyWith(
-          lastMessage: message,
-          lastActivity: message.sentAt,
-        ),
-      },
+      messages: {...state.messages, conversationId: thread},
+      conversations: convo == null
+          ? state.conversations
+          : {
+              ...state.conversations,
+              conversationId: convo.copyWith(
+                lastMessage: last,
+                lastActivity: last?.sentAt ?? convo.lastActivity,
+              ),
+            },
     );
   }
 
+  Future<void> sendText(String conversationId, String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    if (!state.conversations.containsKey(conversationId)) return;
+    // The sent message arrives back through the live stream (Firestore reflects
+    // the pending write immediately via its local cache).
+    await _repository.sendText(conversationId, trimmed);
+  }
+
   void markRead(String conversationId) {
+    _repository.markRead(conversationId);
     final conversation = state.conversations[conversationId];
     if (conversation == null || conversation.unreadCount == 0) return;
     state = state.copyWith(conversations: {
@@ -121,6 +137,8 @@ class MessagingController extends StateNotifier<MessagingState> {
 
   /// Removes a conversation locally (on unmatch/block).
   void removeConversation(String conversationId) {
+    _subs.remove(conversationId)?.cancel();
+    _systemNotes.remove(conversationId);
     if (!state.conversations.containsKey(conversationId)) return;
     state = state.copyWith(
       conversations: {...state.conversations}..remove(conversationId),
@@ -128,5 +146,26 @@ class MessagingController extends StateNotifier<MessagingState> {
     );
   }
 
-  void clear() => state = const MessagingState();
+  void clear() {
+    for (final s in _subs.values) {
+      s.cancel();
+    }
+    _subs.clear();
+    _systemNotes.clear();
+    state = const MessagingState();
+  }
+
+  @override
+  void dispose() {
+    for (final s in _subs.values) {
+      s.cancel();
+    }
+    super.dispose();
+  }
 }
+
+/// The messaging backend. Defaults to an in-memory store; overridden with a
+/// Firestore-backed repository in firebaseBootstrap.
+final messagingRepositoryProvider = Provider<MessagingRepository>(
+  (ref) => InMemoryMessagingRepository(),
+);
