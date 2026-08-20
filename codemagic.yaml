@@ -1,0 +1,141 @@
+# Codemagic CI/CD for Pairra (Flutter) — https://docs.codemagic.io/yaml/yaml-getting-started/
+#
+# Three workflows:
+#   1) ios-unsigned    — builds the iOS app WITHOUT code signing. Works immediately,
+#                        no Apple Developer account required. Use it to confirm the
+#                        project compiles on a real Mac. Artifact = Runner.app (not
+#                        installable on a device; verification only).
+#   2) ios-appstore    — builds a SIGNED .ipa and (optionally) ships to TestFlight.
+#                        Requires an Apple Developer account + one-time setup in the
+#                        Codemagic UI (see the block above that workflow).
+#   3) android-apk     — builds a release APK you can sideload for testing now.
+#
+# To run: push this file, connect the GitHub repo (markrocks65-ai/Pairra-) in the
+# Codemagic app, then start a build and pick a workflow.
+
+definitions:
+  # Shared setup reused by the workflows below (YAML anchors).
+  flutter_setup: &flutter_setup
+    flutter: 3.44.4          # pin to the version this app was built with
+    xcode: latest
+    cocoapods: default
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # 1) iOS — UNSIGNED. Builds today, no Apple account needed.
+  # ---------------------------------------------------------------------------
+  ios-unsigned:
+    name: iOS (unsigned build check)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      <<: *flutter_setup
+    scripts:
+      - name: Flutter version
+        script: flutter --version
+      - name: Get packages
+        script: flutter pub get
+      - name: Install CocoaPods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Analyze
+        script: flutter analyze || true    # non-blocking; report only
+      - name: Build unsigned iOS
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - build/ios/iphoneos/*.app
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - markrocks65@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  # ---------------------------------------------------------------------------
+  # 2) iOS — SIGNED, App Store / TestFlight.
+  #
+  # ONE-TIME SETUP in the Codemagic UI before this workflow can run:
+  #   a) Apple Developer account active ($99/yr) and the bundle id
+  #      `com.pairra.pairra` registered in App Store Connect.
+  #   b) Codemagic → Teams/App settings → Integrations → App Store Connect:
+  #      add an App Store Connect API key. Then reference it below under
+  #      `integrations.app_store_connect` by the NAME you gave it
+  #      (replace "Pairra ASC Key" if you named it differently).
+  #   c) Codemagic auto-manages signing certificates/profiles from that API key
+  #      (ios_signing block below). No .p12 juggling needed.
+  #   d) Create the app record in App Store Connect (or let the first successful
+  #      TestFlight upload create it).
+  # ---------------------------------------------------------------------------
+  ios-appstore:
+    name: iOS (App Store / TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    integrations:
+      app_store_connect: Pairra ASC Key   # <-- must match the key name in Codemagic UI
+    environment:
+      <<: *flutter_setup
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.pairra.pairra
+      vars:
+        APP_STORE_APPLE_ID: 0000000000     # <-- your app's numeric Apple ID (set once app exists)
+    scripts:
+      - name: Get packages
+        script: flutter pub get
+      - name: Set up signing
+        script: xcode-project use-profiles
+      - name: Install CocoaPods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Increment build number from TestFlight
+        script: |
+          # Use the latest TestFlight build number + 1 so uploads never collide.
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "0")
+          echo "Latest TestFlight build: $LATEST"
+          agvtool new-version -all $(($LATEST + 1))
+      - name: Build signed IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - markrocks65@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true         # ship each build to TestFlight
+        # submit_to_app_store: false       # flip to true when ready for App Store review
+
+  # ---------------------------------------------------------------------------
+  # 3) Android — release APK for sideload testing (no Play account needed).
+  # ---------------------------------------------------------------------------
+  android-apk:
+    name: Android (release APK)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      flutter: 3.44.4
+    scripts:
+      - name: Get packages
+        script: flutter pub get
+      - name: Analyze
+        script: flutter analyze || true
+      - name: Build APK
+        script: flutter build apk --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients:
+          - markrocks65@gmail.com
+        notify:
+          success: true
+          failure: true
