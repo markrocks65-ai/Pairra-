@@ -7,6 +7,8 @@ import '../features/auth/application/auth_providers.dart';
 import '../features/auth/data/firebase_auth_repository.dart';
 import '../features/onboarding/application/onboarding_providers.dart';
 import '../features/onboarding/data/firestore_onboarding_repository.dart';
+import '../features/settings/application/account_deletion_service.dart';
+import '../features/settings/data/firebase_account_deletion_repository.dart';
 import '../firebase_options.dart';
 
 /// Attempts to initialize Firebase and, on success, returns the provider
@@ -43,6 +45,13 @@ Future<List<Override>> firebaseBootstrap() async {
       }),
       onboardingRepositoryProvider.overrideWithValue(
         FirestoreOnboardingRepository(FirebaseFirestore.instance),
+      ),
+      // Real account deletion: calls the server-side `deleteAccount` Cloud
+      // Function (authoritative cascade + Auth deletion). Required by Apple
+      // App Review guideline 5.1.1(v) — deletion must actually remove the
+      // account, not just deactivate it.
+      accountDeletionRepositoryProvider.overrideWithValue(
+        FirebaseAccountDeletionRepository(),
       ),
     ];
   } catch (e) {

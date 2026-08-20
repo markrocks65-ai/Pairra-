@@ -243,9 +243,30 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<void> deleteAccount() async {
     final user = _auth.currentUser;
     if (user == null) return;
+    // The authoritative deletion (all Firestore data + Storage + the Auth user)
+    // is performed server-side by the `deleteAccount` Cloud Function. By the
+    // time we get here the user doc and Auth user may already be gone, so both
+    // steps are best-effort. If the local self-delete can't run (session too old
+    // for `requires-recent-login`, or the user is already removed), we just clear
+    // the local session — the account is deleted regardless.
     try {
       await _userDoc(user.uid).delete();
+    } catch (_) {}
+    try {
       await user.delete();
+    } on fb.FirebaseAuthException catch (e) {
+      const alreadyHandled = {
+        'requires-recent-login',
+        'user-not-found',
+        'user-token-expired',
+        'user-mismatch',
+        'user-disabled',
+      };
+      if (alreadyHandled.contains(e.code)) {
+        await _auth.signOut();
+        return;
+      }
+      _fail(e);
     } catch (e) {
       _fail(e);
     }
