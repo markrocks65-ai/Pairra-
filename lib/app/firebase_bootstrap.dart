@@ -14,7 +14,11 @@ import '../features/discovery/data/firebase_likes_repository.dart';
 import '../features/discovery/data/firebase_matches_repository.dart';
 import '../features/messaging/application/messaging_controller.dart';
 import '../features/messaging/data/firebase_messaging_repository.dart';
+import '../features/moderation/application/moderation_service.dart';
+import '../features/moderation/data/firebase_moderation_repository.dart';
 import '../features/onboarding/application/onboarding_providers.dart';
+import '../features/safety/application/safety_controllers.dart';
+import '../features/safety/data/firebase_blocked_repository.dart';
 import '../features/onboarding/data/firestore_onboarding_repository.dart';
 import '../features/settings/application/account_deletion_service.dart';
 import '../features/settings/data/firebase_account_deletion_repository.dart';
@@ -93,6 +97,22 @@ Future<List<Override>> firebaseBootstrap() async {
           FirebaseFirestore.instance,
           FirebaseAuth.instance,
           FirebaseFunctions.instance,
+        ),
+      ),
+      // Real reports: files confidential moderationCases (reporterId == caller;
+      // server acknowledges + queues). The client never reads the queue.
+      moderationRepositoryProvider.overrideWithValue(
+        FirebaseModerationRepository(
+          FirebaseFirestore.instance,
+          FirebaseAuth.instance,
+        ),
+      ),
+      // Real blocks: owner-scoped blocked docs the server honors for mutual
+      // invisibility across discovery and matching.
+      blockedRepositoryProvider.overrideWithValue(
+        FirebaseBlockedRepository(
+          FirebaseFirestore.instance,
+          FirebaseAuth.instance,
         ),
       ),
     ];

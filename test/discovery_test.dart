@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pairra/features/safety/data/noop_blocked_repository.dart';
 import 'package:pairra/features/compatibility/application/compatibility_service.dart';
 import 'package:pairra/features/discovery/application/discovery_controller.dart';
 import 'package:pairra/features/discovery/application/matches_controller.dart';
@@ -41,7 +42,7 @@ DiscoveryController _controller(
       const CompatibilityService(),
       _self(),
       matches,
-      blocked ?? BlockedProfilesController(),
+      blocked ?? BlockedProfilesController(const NoopBlockedRepository()),
       const NoopLikesRepository(),
       premium: premium,
     );
@@ -141,7 +142,7 @@ void main() {
   });
 
   test('blocking removes a candidate and records it app-wide', () async {
-    final blocked = BlockedProfilesController();
+    final blocked = BlockedProfilesController(const NoopBlockedRepository());
     final c = _controller(MatchesController(const NoopMatchesRepository()), blocked: blocked);
     await _settle();
 

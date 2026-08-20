@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pairra/features/safety/data/noop_blocked_repository.dart';
 import 'package:pairra/features/safety/application/safety_controllers.dart';
 import 'package:pairra/features/safety/application/safety_plan_controller.dart';
 import 'package:pairra/features/safety/domain/report.dart';
@@ -20,7 +21,7 @@ SafetyPlan _plan({bool checkIn = true}) {
 void main() {
   group('BlockedProfilesController', () {
     test('blocks immediately, keeps a name, and unblocks', () {
-      final c = BlockedProfilesController();
+      final c = BlockedProfilesController(const NoopBlockedRepository());
       c.block('u1', name: 'Alex');
       expect(c.isBlocked('u1'), isTrue);
       expect(c.state.single.displayName, 'Alex');
@@ -33,7 +34,7 @@ void main() {
     });
 
     test('missing name shows a friendly fallback', () {
-      final c = BlockedProfilesController();
+      final c = BlockedProfilesController(const NoopBlockedRepository());
       c.block('u2');
       expect(c.state.single.displayName, 'Blocked user');
     });
