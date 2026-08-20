@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "998272819517",
+    "project_id": "pairra-app-e104f",
+    "storage_bucket": "pairra-app-e104f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:998272819517:android:376bc6e03f15c0174e6554",
+        "android_client_info": {
+          "package_name": "com.pairra.pairra"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfn2W_hh3VprK_LXVdqbGn1AaKiJh-wc4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

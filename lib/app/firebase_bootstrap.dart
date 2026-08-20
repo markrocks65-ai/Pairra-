@@ -7,6 +7,7 @@ import '../features/auth/application/auth_providers.dart';
 import '../features/auth/data/firebase_auth_repository.dart';
 import '../features/onboarding/application/onboarding_providers.dart';
 import '../features/onboarding/data/firestore_onboarding_repository.dart';
+import '../firebase_options.dart';
 
 /// Attempts to initialize Firebase and, on success, returns the provider
 /// overrides that switch the app from the in-memory mocks to the real
@@ -19,7 +20,12 @@ import '../features/onboarding/data/firestore_onboarding_repository.dart';
 /// automatically, with no code changes.
 Future<List<Override>> firebaseBootstrap() async {
   try {
-    await Firebase.initializeApp();
+    // Explicit generated options (lib/firebase_options.dart) so init works on
+    // iOS without a bundled GoogleService-Info.plist and on Android alongside
+    // the google-services config — same real project (pairra-app-e104f).
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
 
     // Offline-first: keep a local cache so reads/writes work without a
     // connection and sync when it returns (Step 10 — graceful offline). Must be
