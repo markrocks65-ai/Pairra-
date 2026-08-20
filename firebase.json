@@ -1,1 +1,28 @@
-{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"storage":{"rules":"storage.rules"},"emulators":{"firestore":{"port":8080},"ui":{"enabled":false},"singleProjectMode":true},"flutter":{"platforms":{"android":{"default":{"projectId":"pairra-app-e104f","appId":"1:998272819517:android:376bc6e03f15c0174e6554","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"pairra-app-e104f","configurations":{"android":"1:998272819517:android:376bc6e03f15c0174e6554","ios":"1:998272819517:ios:4054d1b44fbb90554e6554"}}}}}}
+{
+  "_comment": "Firestore/Storage RULES are intentionally NOT declared here. The web repo (pairra-web) is the single source of truth for security rules and owns deployment to project pairra-app-e104f. Do NOT add `firestore`/`storage` rule targets back — deploying rules from this repo would overwrite the live ruleset with a stale subset (missing auditLog/adminUsers/datePlans/gameSessions/purchases) and break the web app. See firestore.rules here for reference only.",
+  "emulators": {
+    "firestore": { "port": 8080 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "pairra-app-e104f",
+          "appId": "1:998272819517:android:376bc6e03f15c0174e6554",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "pairra-app-e104f",
+          "configurations": {
+            "android": "1:998272819517:android:376bc6e03f15c0174e6554",
+            "ios": "1:998272819517:ios:4054d1b44fbb90554e6554"
+          }
+        }
+      }
+    }
+  }
+}
