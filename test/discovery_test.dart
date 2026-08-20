@@ -3,6 +3,8 @@ import 'package:pairra/features/compatibility/application/compatibility_service.
 import 'package:pairra/features/discovery/application/discovery_controller.dart';
 import 'package:pairra/features/discovery/application/matches_controller.dart';
 import 'package:pairra/features/discovery/data/mock_discovery_repository.dart';
+import 'package:pairra/features/discovery/data/noop_likes_repository.dart';
+import 'package:pairra/features/discovery/data/noop_matches_repository.dart';
 import 'package:pairra/features/discovery/domain/discovery_filters.dart';
 import 'package:pairra/features/discovery/domain/match.dart';
 import 'package:pairra/features/onboarding/domain/onboarding_profile.dart';
@@ -40,12 +42,13 @@ DiscoveryController _controller(
       _self(),
       matches,
       blocked ?? BlockedProfilesController(),
+      const NoopLikesRepository(),
       premium: premium,
     );
 
 void main() {
   test('candidates load ranked most-compatible first', () async {
-    final c = _controller(MatchesController());
+    final c = _controller(MatchesController(const NoopMatchesRepository()));
     await _settle();
 
     expect(c.state.loading, isFalse);
@@ -60,7 +63,7 @@ void main() {
   });
 
   test('like on a mutual candidate creates a match; pass never does', () async {
-    final matches = MatchesController();
+    final matches = MatchesController(const NoopMatchesRepository());
     final c = _controller(matches);
     await _settle();
 
@@ -82,7 +85,7 @@ void main() {
   });
 
   test('pass advances without creating a match', () async {
-    final matches = MatchesController();
+    final matches = MatchesController(const NoopMatchesRepository());
     final c = _controller(matches);
     await _settle();
 
@@ -93,7 +96,7 @@ void main() {
   });
 
   test('MatchesController de-duplicates by id', () {
-    final matches = MatchesController();
+    final matches = MatchesController(const NoopMatchesRepository());
     final m = Match(
       id: 'x',
       profile: const OnboardingProfile(displayName: 'X'),
@@ -106,7 +109,7 @@ void main() {
   });
 
   test('maybe advances without a match', () async {
-    final c = _controller(MatchesController());
+    final c = _controller(MatchesController(const NoopMatchesRepository()));
     await _settle();
     final first = c.state.current;
     c.maybe();
@@ -114,7 +117,7 @@ void main() {
   });
 
   test('a minimum-compatibility filter shrinks the queue', () async {
-    final c = _controller(MatchesController());
+    final c = _controller(MatchesController(const NoopMatchesRepository()));
     await _settle();
     final before = c.state.queue.length;
 
@@ -128,7 +131,7 @@ void main() {
   });
 
   test('an intention filter only keeps candidates who share it', () async {
-    final c = _controller(MatchesController());
+    final c = _controller(MatchesController(const NoopMatchesRepository()));
     await _settle();
 
     c.setFilters(const DiscoveryFilters(intentions: {'long_term'}));
@@ -139,7 +142,7 @@ void main() {
 
   test('blocking removes a candidate and records it app-wide', () async {
     final blocked = BlockedProfilesController();
-    final c = _controller(MatchesController(), blocked: blocked);
+    final c = _controller(MatchesController(const NoopMatchesRepository()), blocked: blocked);
     await _settle();
 
     final id = c.state.current!.candidate.id;
@@ -149,14 +152,14 @@ void main() {
   });
 
   test('free users consume likes; premium is unlimited', () async {
-    final free = _controller(MatchesController());
+    final free = _controller(MatchesController(const NoopMatchesRepository()));
     await _settle();
     expect(free.remainingLikes, 12);
     expect(free.canLike, isTrue);
     free.like();
     expect(free.remainingLikes, 11, reason: 'a like was consumed');
 
-    final premium = _controller(MatchesController(), premium: true);
+    final premium = _controller(MatchesController(const NoopMatchesRepository()), premium: true);
     await _settle();
     expect(premium.remainingLikes, isNull, reason: 'unlimited');
     premium.like();

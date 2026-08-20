@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pairra/features/discovery/application/matches_controller.dart';
+import 'package:pairra/features/discovery/data/noop_matches_repository.dart';
 import 'package:pairra/features/discovery/domain/match.dart';
 import 'package:pairra/features/messaging/application/icebreakers.dart';
 import 'package:pairra/features/messaging/application/messaging_controller.dart';
@@ -87,7 +88,7 @@ void main() {
   });
 
   test('MatchesController.remove drops the match', () {
-    final matches = MatchesController();
+    final matches = MatchesController(const NoopMatchesRepository());
     matches.add(_match('m1'));
     matches.add(_match('m2'));
     matches.remove('m1');

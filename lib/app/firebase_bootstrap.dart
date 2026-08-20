@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/application/auth_providers.dart';
 import '../features/auth/data/firebase_auth_repository.dart';
 import '../features/discovery/application/discovery_providers.dart';
+import '../features/discovery/application/matches_controller.dart';
 import '../features/discovery/data/firebase_discovery_repository.dart';
+import '../features/discovery/data/firebase_likes_repository.dart';
+import '../features/discovery/data/firebase_matches_repository.dart';
 import '../features/onboarding/application/onboarding_providers.dart';
 import '../features/onboarding/data/firestore_onboarding_repository.dart';
 import '../features/settings/application/account_deletion_service.dart';
@@ -61,6 +66,23 @@ Future<List<Override>> firebaseBootstrap() async {
       // honest empty state rather than fake people.
       discoveryRepositoryProvider.overrideWithValue(
         FirebaseDiscoveryRepository(),
+      ),
+      // Real like/pass: writes owner-scoped decision docs; a mutual like fires
+      // the server's onLikeCreated trigger to create the match + conversation.
+      likesRepositoryProvider.overrideWithValue(
+        FirebaseLikesRepository(
+          FirebaseFirestore.instance,
+          FirebaseAuth.instance,
+        ),
+      ),
+      // Real matches: live stream of server-created matches (hydrated from each
+      // other participant's public card); unmatch goes through the callable.
+      matchesRepositoryProvider.overrideWithValue(
+        FirebaseMatchesRepository(
+          FirebaseFirestore.instance,
+          FirebaseAuth.instance,
+          FirebaseFunctions.instance,
+        ),
       ),
     ];
   } catch (e) {

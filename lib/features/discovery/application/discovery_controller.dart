@@ -9,6 +9,7 @@ import '../../safety/application/safety_controllers.dart';
 import '../domain/candidate.dart';
 import '../domain/discovery_filters.dart';
 import '../domain/discovery_repository.dart';
+import '../domain/likes_repository.dart';
 import '../domain/match.dart';
 import 'matches_controller.dart';
 
@@ -66,7 +67,8 @@ class DiscoveryController extends StateNotifier<DiscoveryState> {
     this._service,
     this._self,
     this._matches,
-    this._blocked, {
+    this._blocked,
+    this._likes, {
     bool premium = false,
     // ignore: prefer_initializing_formals — private named params can't be formals.
   })  : _premium = premium,
@@ -79,6 +81,7 @@ class DiscoveryController extends StateNotifier<DiscoveryState> {
   final OnboardingProfile _self;
   final MatchesController _matches;
   final BlockedProfilesController _blocked;
+  final LikesRepository _likes;
 
   /// Free users get a limited number of likes; premium is unlimited. Safety
   /// actions (pass/block/report) are never limited.
@@ -181,6 +184,11 @@ class DiscoveryController extends StateNotifier<DiscoveryState> {
     if (current == null || !canLike) return null;
     if (!_premium) _likesUsed++;
     _seen.add(current.candidate.id);
+    // Record the like on the backend. When it's mutual, the server's
+    // onLikeCreated trigger creates the match, which arrives via the matches
+    // stream (and a push notification) — the reveal is asynchronous, not the
+    // old synchronous simulation below (kept only for the mock/dev path).
+    _likes.like(current.candidate.id);
     Match? match;
     if (current.candidate.likesYou) {
       match = Match(
@@ -199,6 +207,7 @@ class DiscoveryController extends StateNotifier<DiscoveryState> {
     final current = state.current;
     if (current == null) return;
     _seen.add(current.candidate.id);
+    _likes.pass(current.candidate.id);
     _rebuild();
   }
 

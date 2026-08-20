@@ -5,7 +5,9 @@ import '../../profile/application/profile_providers.dart';
 import '../../safety/application/safety_controllers.dart';
 import '../../subscription/application/subscription_controller.dart';
 import '../data/mock_discovery_repository.dart';
+import '../data/noop_likes_repository.dart';
 import '../domain/discovery_repository.dart';
+import '../domain/likes_repository.dart';
 import 'discovery_controller.dart';
 import 'matches_controller.dart';
 
@@ -13,6 +15,13 @@ import 'matches_controller.dart';
 /// repository later.
 final discoveryRepositoryProvider = Provider<DiscoveryRepository>(
   (ref) => MockDiscoveryRepository(),
+);
+
+/// Records like/pass decisions. Defaults to a no-op; overridden with a
+/// Firestore-backed repository in firebaseBootstrap (a like triggers server
+/// match creation).
+final likesRepositoryProvider = Provider<LikesRepository>(
+  (ref) => const NoopLikesRepository(),
 );
 
 /// The discovery feed controller. Recomputes if the current user's profile
@@ -25,6 +34,7 @@ final discoveryControllerProvider =
     ref.watch(currentProfileProvider),
     ref.watch(matchesControllerProvider.notifier),
     ref.watch(blockedProfilesProvider.notifier),
+    ref.watch(likesRepositoryProvider),
     premium: ref.watch(isPremiumProvider),
   );
 });
