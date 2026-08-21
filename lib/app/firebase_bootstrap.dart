@@ -1,9 +1,12 @@
+import 'dart:io' show Platform;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../features/auth/application/auth_providers.dart';
 import '../features/auth/data/firebase_auth_repository.dart';
@@ -22,6 +25,9 @@ import '../features/safety/data/firebase_blocked_repository.dart';
 import '../features/onboarding/data/firestore_onboarding_repository.dart';
 import '../features/settings/application/account_deletion_service.dart';
 import '../features/settings/data/firebase_account_deletion_repository.dart';
+import '../features/subscription/application/subscription_controller.dart';
+import '../features/subscription/data/revenuecat_config.dart';
+import '../features/subscription/data/revenuecat_subscription_repository.dart';
 import '../firebase_options.dart';
 
 /// Attempts to initialize Firebase and, on success, returns the provider
@@ -50,7 +56,7 @@ Future<List<Override>> firebaseBootstrap() async {
       cacheSizeBytes: 100 * 1024 * 1024,
     );
 
-    return [
+    final overrides = <Override>[
       authRepositoryProvider.overrideWith((ref) {
         final repo = FirebaseAuthRepository();
         ref.onDispose(repo.dispose);
@@ -116,10 +122,51 @@ Future<List<Override>> firebaseBootstrap() async {
         ),
       ),
     ];
+
+    // Subscriptions via RevenueCat — only when a public SDK key is provided at
+    // build time (otherwise the paywall stays on the mock and never charges).
+    // The RevenueCat appUserID is kept equal to the Firebase uid so the server
+    // webhook (revenueCatWebhook) can write the authoritative plan.
+    await _configureRevenueCatIfAvailable(overrides);
+    return overrides;
   } catch (e) {
     // No config, or init failed — fall back to the in-memory mocks so the app
     // still runs. The raw error never reaches a user (debug log only).
     debugPrint('Firebase not configured — running on in-memory mocks. ($e)');
     return const [];
+  }
+}
+
+/// Configures RevenueCat and adds the real subscription override when a public
+/// SDK key is supplied at build time. No key → the mock paywall stays in place.
+Future<void> _configureRevenueCatIfAvailable(List<Override> overrides) async {
+  final key = Platform.isIOS
+      ? RevenueCatConfig.iosApiKey
+      : (Platform.isAndroid ? RevenueCatConfig.androidApiKey : '');
+  if (key.isEmpty) return;
+  try {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    await Purchases.configure(
+      PurchasesConfiguration(key)..appUserID = uid,
+    );
+    // Keep the RevenueCat identity aligned with the Firebase user.
+    FirebaseAuth.instance.authStateChanges().listen((user) async {
+      try {
+        if (user != null) {
+          await Purchases.logIn(user.uid);
+        } else {
+          await Purchases.logOut();
+        }
+      } catch (_) {/* non-fatal */}
+    });
+    overrides.add(
+      subscriptionRepositoryProvider.overrideWith((ref) {
+        final repo = RevenueCatSubscriptionRepository();
+        ref.onDispose(repo.dispose);
+        return repo;
+      }),
+    );
+  } catch (e) {
+    debugPrint('RevenueCat not configured — mock paywall stays. ($e)');
   }
 }
